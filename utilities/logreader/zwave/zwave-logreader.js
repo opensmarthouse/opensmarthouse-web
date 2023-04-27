@@ -500,6 +500,10 @@ function ZWaveLogReader() {
         128: {
             name: "GetRoutingInfo",
             processor: processRoutingInfo
+        },
+        168: {
+            name: "BridgeCommandHandler",
+            processor: processBridgeCommand
         }
     };
 
@@ -2926,15 +2930,21 @@ function ZWaveLogReader() {
                 break;
             case 3: // SENSOR_BINARY_REPORT
                 if (bytes.length > 3) {
-                    var typeReport = HEX2DEC(bytes[2]);
-                    var scale = HEX2DEC(bytes[3]);
-                    var val1 = HEX2DEC(bytes[4]);
+                    //changed this for clarity-Nothing to do with Bridge. Now shows type and value, scale not relevant for binary
+                    var typeReport = HEX2DEC(bytes[3]);
+                    var val1 = HEX2DEC(bytes[2]);
                     var name = "";
                     if (binarySensors[typeReport] == null) {
-                        data.content += "::" + typeReport + "(" + scale + ") = " + val1;
+                        data.content += "::" + typeReport + " = " + val1;
                         name = commandClasses[cmdCls].name + " " + typeReport;
                     } else {
-                        data.content += "::" + binarySensors[typeReport] + "(" + scale + ") = " + val1;
+                        if (val1 == 0) {
+                            data.content += " <span class='badge badge-secondary'>" + binarySensors[typeReport] + "</span>" + " <span class='badge badge-secondary'>OFF</span>";
+                        } else if (val1 == 255) {
+                            data.content += " <span class='badge badge-secondary'>" + binarySensors[typeReport] + "</span>" + " <span class='badge badge-secondary'>ON</span>";
+                        } else {
+                            data.content += " <span class='badge badge-secondary'>" + binarySensors[typeReport] + "</span>" + " <span class='badge badge-secondary'>" + "=" + val1 + "</span>";
+                        }
                         name = commandClasses[cmdCls].name + " " + binarySensors[typeReport];
                     }
                     addNodeItem(node, endpoint, name, commandClasses[cmdCls].name, "sensor_type=" + typeReport);
@@ -3241,11 +3251,12 @@ function ZWaveLogReader() {
                 break;
             case 5: // SENSOR_MULTI_LEVEL_REPORT
                 var typeReport = HEX2DEC(bytes[2]);
-                var scale = HEX2DEC(bytes[3]);
+                // Again non-bridge related; Questionable value (scale)- the byte is combo of precision/scale/size;  confusing
+                //var scale = HEX2DEC(bytes[3]);
                 if (multilevelSensors[typeReport] == null) {
-                    data.content += " <span class='badge badge-secondary'>" + typeReport + "=" + scale + "</span>";
+                    data.content += " <span class='badge badge-secondary'>" + typeReport + "</span>";
                 } else {
-                    data.content += " <span class='badge badge-secondary'>" + multilevelSensors[typeReport] + "=" + scale + "</span>";
+                    data.content += " <span class='badge badge-secondary'>" + multilevelSensors[typeReport]  + "</span>";
                 }
                 addNodeItem(node, endpoint, "??", commandClasses[cmdCls].name, "sensor_type=" + typeReport);
                 break;
@@ -3361,7 +3372,7 @@ function ZWaveLogReader() {
             data.param_size = HEX2DEC(bytes[3]);
             data.param_value = 0;
             for (var cnt = 0; cnt < data.param_size; cnt++) {
-                data.param_value += HEX2DEC(bytes[4 + cnt]) * (cnt * 256);
+                data.param_value += HEX2DEC(bytes[3 + data.param_size - cnt]) * (256 ** cnt);
             }
             data.content += " <span class='badge badge-secondary'>SIZE=" + data.param_size + "</span>";
             data.content += " <span class='badge badge-secondary'>VALUE=" + data.param_value + "</span>";
@@ -4273,6 +4284,33 @@ function ZWaveLogReader() {
 
         return data;
     }
+
+    function processBridgeCommand(node, direction, type, bytes, len) {
+        var data = {
+            result: SUCCESS
+        };
+        if (direction == "TX") {
+            setStatus(data, ERROR);
+        } else {
+            if (type == REQUEST) {
+                data.cmdClass = processCommandClass(HEX2DEC(bytes[2]), 0, bytes.slice(4 , len - 1));
+
+                createNode(data.cmdClass.node);
+                if (nodes[data.cmdClass.node].classes[data.cmdClass.class] == null) {
+                    nodes[data.cmdClass.node].classes[data.cmdClass.class] = 0;
+                }
+                nodes[data.cmdClass.node].classes[data.cmdClass.class]++;
+                data.content = data.cmdClass.content;
+                data.expandedContent = data.cmdClass.expandedContent;
+                data.node = data.cmdClass.node;
+            } else {
+                setStatus(data, ERROR);
+            }
+        }
+
+        return data;
+    }
+
 
     function processFailedNode(node, direction, type, bytes, len) {
         var data = {
