@@ -2938,7 +2938,13 @@ function ZWaveLogReader() {
                         data.content += "::" + typeReport + " = " + val1;
                         name = commandClasses[cmdCls].name + " " + typeReport;
                     } else {
-                        data.content += "::" + binarySensors[typeReport] + " = " + val1;
+                        if (val1 == 0) {
+                            data.content += " <span class='badge badge-secondary'>" + binarySensors[typeReport] + "</span>" + " <span class='badge badge-secondary'>OFF</span>";
+                        } else if (val1 == 255) {
+                            data.content += " <span class='badge badge-secondary'>" + binarySensors[typeReport] + "</span>" + " <span class='badge badge-secondary'>ON</span>";
+                        } else {
+                            data.content += " <span class='badge badge-secondary'>" + binarySensors[typeReport] + "</span>" + " <span class='badge badge-secondary'>" + "=" + val1 + "</span>";
+                        }
                         name = commandClasses[cmdCls].name + " " + binarySensors[typeReport];
                     }
                     addNodeItem(node, endpoint, name, commandClasses[cmdCls].name, "sensor_type=" + typeReport);
@@ -3366,7 +3372,7 @@ function ZWaveLogReader() {
             data.param_size = HEX2DEC(bytes[3]);
             data.param_value = 0;
             for (var cnt = 0; cnt < data.param_size; cnt++) {
-                data.param_value += HEX2DEC(bytes[4 + cnt]) * (cnt * 256);
+                data.param_value += HEX2DEC(bytes[3 + data.param_size - cnt]) * (256 ** cnt);
             }
             data.content += " <span class='badge badge-secondary'>SIZE=" + data.param_size + "</span>";
             data.content += " <span class='badge badge-secondary'>VALUE=" + data.param_value + "</span>";
@@ -4287,7 +4293,7 @@ function ZWaveLogReader() {
             setStatus(data, ERROR);
         } else {
             if (type == REQUEST) {
-                data.cmdClass = processCommandClass(HEX2DEC(bytes[2]), 0, bytes.slice(4));
+                data.cmdClass = processCommandClass(HEX2DEC(bytes[2]), 0, bytes.slice(4 , len - 1));
 
                 createNode(data.cmdClass.node);
                 if (nodes[data.cmdClass.node].classes[data.cmdClass.class] == null) {
